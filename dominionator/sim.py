@@ -1,6 +1,7 @@
-from attr import attrs, attrib, Factory
+from attr import attrs, attrib, Factory, evolve
 from random import shuffle
 from collections import OrderedDict, defaultdict
+from enum import Enum, auto
 
 
 @attrs(frozen=True)
@@ -32,6 +33,20 @@ class Move(object):
 @attrs
 class Buy(Move):
     card = attrib()
+
+    def run(self, game_state, player_state, turn_state):
+        assert turn_state.buys
+        assert self.card.cost <= turn_state.gold
+        assert game_state.supply[self.card]
+
+        game_state.supply[self.card] -= 1
+        player_state.discard.append(self.card)
+        return evolve(
+            turn_state,
+            phase=Game.TurnPhase.BUY,
+            buys=turn_state.buys - 1,
+            gold=turn_state.gold - self.card.cost,
+        )
 
 
 class Game(object):
@@ -80,6 +95,18 @@ class Game(object):
             cards = self.deck + self.discard
             return sum(card.victory for card in cards)
 
+    class TurnPhase(Enum):
+        ACTION = auto()
+        BUY = auto()
+
+    @attrs(frozen=True)
+    class TurnState(object):
+        hand = attrib()
+        phase = attrib(default=Factory(lambda: Game.TurnPhase.ACTION))
+        actions = attrib(default=1)
+        buys = attrib(default=1)
+        gold = attrib(default=0)
+
     def is_end(self):
         return (
             self.supply[card_types["province"]] == 0
@@ -91,12 +118,11 @@ class Game(object):
 
         player_state.num_turns += 1
 
-        actions = 1
-        buys = 1
         hand = player_state.get_cards(5)
         gold = sum(card.gold for card in hand)
+        turn_state = self.TurnState(hand=hand, gold=gold)
 
-        move_gen = player.play(self, player_state, hand, actions, buys, gold)
+        move_gen = player.play(self, player_state, turn_state)
 
         first = True
 
@@ -106,22 +132,13 @@ class Game(object):
                     move = next(move_gen)
                     first = False
                 else:
-                    move = move_gen.send((hand, actions, buys, gold))
+                    move = move_gen.send((turn_state))
             except StopIteration:
                 break
 
-            if isinstance(move, Buy):
-                assert buys
-                assert move.card.cost <= gold
-                assert self.supply[move.card]
-                self.supply[move.card] -= 1
-                player_state.discard.append(move.card)
-                buys -= 1
-                gold -= move.card.cost
-            else:
-                assert False
+            turn_state = move.run(self, player_state, turn_state)
 
-        player_state.discard.extend(hand)
+        player_state.discard.extend(turn_state.hand)
 
     def run(self):
         player_i = 0
@@ -142,7 +159,7 @@ class Game(object):
 
 
 class Player(object):
-    def play(self, game_state, player_state, hand, actions, buys, gold):
+    def play(self, game_state, player_state, turn_state):
         """Decide what to do during a turn. This should yield Move objects
         indicating the moves to take, and a new (hand, actions, buys, gold)
         tuple will be passed in through this yield, indicating the state after
