@@ -1,6 +1,5 @@
 import numpy as np
-import sim
-from sim import Game, BigMoneyPlayer
+from .sim import Game
 from itertools import permutations
 
 
