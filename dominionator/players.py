@@ -95,3 +95,33 @@ class BigMoneyPlayerWiki(Player):
             and game_state.supply[card_types["estate"]]
         ):
             yield Buy(card_types["estate"])
+
+
+@attrs
+class BigMoneyMine(BigMoneyPlayerWiki):
+    priority = attrib(
+        default=[
+            (card_types["copper"], card_types["silver"]),
+            (card_types["silver"], card_types["gold"]),
+        ]
+    )
+
+    def play(self, game_state, player_state, turn_state):
+        all_cards = player_state.deck + player_state.discard + turn_state.hand
+
+        if card_types["mine"] in turn_state.hand:
+            for from_card, to_card in self.priority:
+                if from_card in turn_state.hand and game_state.supply[to_card]:
+                    yield card_types["mine"].action(from_card, to_card)
+                    break
+
+        if (
+            6 > turn_state.gold >= 5
+            and all_cards.count(card_types["mine"]) < 1
+            and game_state.supply[card_types["mine"]]
+        ):
+            yield Buy(card_types["mine"])
+        else:
+            yield from super(BigMoneyMine, self).play(
+                game_state, player_state, turn_state
+            )

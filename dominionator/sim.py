@@ -2,6 +2,21 @@ from attr import attrs, attrib, Factory, evolve
 from random import shuffle
 from collections import OrderedDict, defaultdict
 from enum import Enum, auto
+from .list_utils import removed
+
+
+class Move(object):
+    pass
+
+
+@attrs(frozen=True)
+class Action(Move):
+    action_card = attrib()
+
+    def run(self, game_state, player_state, turn_state):
+        assert turn_state.phase == Game.TurnPhase.ACTION
+        player_state.discard.append(self.action_card)
+        return evolve(turn_state, hand=removed(turn_state.hand, self.action_card))
 
 
 @attrs(frozen=True)
@@ -14,6 +29,32 @@ class Card(object):
     victory = attrib(default=0)
 
 
+class Mine(Card):
+    @classmethod
+    def make(cls):
+        return cls("mine", 5)
+
+    def action(self, from_card, to_card):
+        return self.MineAction(self, from_card, to_card)
+
+    @attrs(frozen=True)
+    class MineAction(Action):
+        from_card = attrib()
+        to_card = attrib()
+
+        def run(self, game_state, player_state, turn_state):
+            turn_state = super(Mine.MineAction, self).run(
+                game_state, player_state, turn_state
+            )
+
+            assert self.to_card.cost <= self.from_card.cost + 3
+
+            return evolve(
+                turn_state,
+                hand=removed(turn_state.hand, self.from_card) + [self.to_card],
+            )
+
+
 _card_types = [
     Card("estate", 2, victory=1),
     Card("duchy", 5, victory=3),
@@ -21,13 +62,10 @@ _card_types = [
     Card("copper", 0, gold=1),
     Card("silver", 3, gold=2),
     Card("gold", 6, gold=3),
+    Mine.make(),
 ]
 
 card_types = OrderedDict((card.name, card) for card in _card_types)
-
-
-class Move(object):
-    pass
 
 
 @attrs
@@ -45,7 +83,7 @@ class Buy(Move):
             turn_state,
             phase=Game.TurnPhase.BUY,
             buys=turn_state.buys - 1,
-            gold=turn_state.gold - self.card.cost,
+            additional_gold=turn_state.additional_gold - self.card.cost,
         )
 
 
@@ -61,6 +99,7 @@ class Game(object):
             ("estate", 8),
             ("duchy", 8),
             ("province", 8),
+            ("mine", 8),
         ]
         self.supply = defaultdict(
             lambda: 0, [(card_types[t], n) for t, n in start_cards]
@@ -105,7 +144,11 @@ class Game(object):
         phase = attrib(default=Factory(lambda: Game.TurnPhase.ACTION))
         actions = attrib(default=1)
         buys = attrib(default=1)
-        gold = attrib(default=0)
+        additional_gold = attrib(default=0)
+
+        @property
+        def gold(self):
+            return sum(card.gold for card in self.hand) + self.additional_gold
 
     def is_end(self):
         return (
@@ -119,8 +162,7 @@ class Game(object):
         player_state.num_turns += 1
 
         hand = player_state.get_cards(5)
-        gold = sum(card.gold for card in hand)
-        turn_state = self.TurnState(hand=hand, gold=gold)
+        turn_state = self.TurnState(hand=hand)
 
         move_gen = player.play(self, player_state, turn_state)
 
