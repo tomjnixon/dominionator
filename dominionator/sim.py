@@ -15,8 +15,13 @@ class Action(Move):
 
     def run(self, game_state, player_state, turn_state):
         assert turn_state.phase == Game.TurnPhase.ACTION
+        assert turn_state.actions
         player_state.discard.append(self.action_card)
-        return evolve(turn_state, hand=removed(turn_state.hand, self.action_card))
+        return evolve(
+            turn_state,
+            actions=turn_state.actions - 1,
+            hand=removed(turn_state.hand, self.action_card),
+        )
 
 
 @attrs(frozen=True)
