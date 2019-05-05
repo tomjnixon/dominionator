@@ -67,7 +67,7 @@ class BigMoneyPlayerWiki(Player):
                 and all_cards.count(card_types["silver"]) < 5
             ):
                 return card_types["gold"]
-            else:
+            elif game_state.supply[card_types["province"]]:
                 return card_types["province"]
 
         elif (
