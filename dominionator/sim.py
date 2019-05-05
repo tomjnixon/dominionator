@@ -29,6 +29,33 @@ class Card(object):
     victory = attrib(default=0)
 
 
+@attrs(frozen=True)
+class BasicActionCard(Card):
+    add_actions = attrib(default=0)
+    add_buys = attrib(default=0)
+    add_gold = attrib(default=0)
+    add_cards = attrib(default=0)
+
+    def action(self):
+        return self.BasicAction(self)
+
+    @attrs(frozen=True)
+    class BasicAction(Action):
+        def run(self, game_state, player_state, turn_state):
+            turn_state = super(BasicActionCard.BasicAction, self).run(
+                game_state, player_state, turn_state
+            )
+
+            return evolve(
+                turn_state,
+                hand=turn_state.hand
+                + player_state.get_cards(self.action_card.add_cards),
+                actions=turn_state.actions + self.action_card.add_actions,
+                buys=turn_state.buys + self.action_card.add_buys,
+                additional_gold=turn_state.additional_gold + self.action_card.add_gold,
+            )
+
+
 class Mine(Card):
     @classmethod
     def make(cls):
@@ -63,6 +90,8 @@ _card_types = [
     Card("silver", 3, gold=2),
     Card("gold", 6, gold=3),
     Mine.make(),
+    BasicActionCard("festival", 5, add_actions=2, add_buys=1, add_gold=2),
+    BasicActionCard("smithy", 4, add_cards=3),
 ]
 
 card_types = OrderedDict((card.name, card) for card in _card_types)
@@ -100,6 +129,8 @@ class Game(object):
             ("duchy", 8),
             ("province", 8),
             ("mine", 8),
+            ("festival", 8),
+            ("smithy", 8),
         ]
         self.supply = defaultdict(
             lambda: 0, [(card_types[t], n) for t, n in start_cards]
