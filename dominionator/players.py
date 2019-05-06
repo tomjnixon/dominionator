@@ -133,3 +133,38 @@ class BigMoneyMine(BigMoneyPlayerWiki):
             yield from super(BigMoneyMine, self).play(
                 game_state, player_state, turn_state
             )
+
+
+@attrs
+class BigMoneyPlus(BigMoneyPlayerWiki):
+    cards = attrib(default=[])
+
+    @attrs
+    class CardToBuy(object):
+        card = attrib()
+        number = attrib(default=1)
+        pay_over = attrib(default=0)
+
+    def play(self, game_state, player_state, turn_state):
+        all_cards = player_state.deck + player_state.discard + turn_state.hand
+
+        # play any action cards
+        for to_buy in self.cards:
+            while turn_state.actions and to_buy.card in turn_state.hand:
+                # print(turn_state.actions)
+                turn_state = (yield to_buy.card.action())
+
+        # buy any action cards
+        for to_buy in self.cards:
+            if (
+                turn_state.buys
+                and game_state.supply[to_buy.card]
+                and (
+                    to_buy.card.cost
+                    <= turn_state.gold
+                    <= to_buy.card.cost + to_buy.pay_over
+                )
+            ):
+                turn_state = (yield Buy(to_buy.card))
+
+        yield from super(BigMoneyPlus, self).play(game_state, player_state, turn_state)
