@@ -53,8 +53,10 @@ class BasicActionCard(Card):
 
             return evolve(
                 turn_state,
-                hand=turn_state.hand
-                + player_state.get_cards(self.action_card.add_cards),
+                hand=(
+                    turn_state.hand
+                    + player_state.get_cards(self.action_card.add_cards, up_to=True)
+                ),
                 actions=turn_state.actions + self.action_card.add_actions,
                 buys=turn_state.buys + self.action_card.add_buys,
                 additional_gold=turn_state.additional_gold + self.action_card.add_gold,
@@ -153,14 +155,17 @@ class Game(object):
         def _discard_default(self):
             return [card_types["copper"]] * 7 + [card_types["estate"]] * 3
 
-        def get_cards(self, n):
-            """Get n cards from the deck, shuffling if necessary."""
+        def get_cards(self, n, up_to=False):
+            """Get n cards from the deck, shuffling if necessary. if up_to,
+            return fewer cards if there are not enough available."""
             if len(self.deck) < n:
                 shuffle(self.discard)
                 self.deck, self.discard = self.deck + self.discard, []
 
-            if len(self.deck) < n:
-                assert False
+            if up_to:
+                n = min(len(self.deck), n)
+            else:
+                assert n <= len(self.deck), "ran out of cards"
 
             res, self.deck = self.deck[:n], self.deck[n:]
             return res
